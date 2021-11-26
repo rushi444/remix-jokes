@@ -1,8 +1,35 @@
-import { ActionFunction, Form, LinksFunction, MetaFunction } from 'remix'
-import { useActionData, Link, useSearchParams } from 'remix'
+import {
+  ActionFunction,
+  LinksFunction,
+  MetaFunction,
+  LoaderFunction,
+  useLoaderData
+} from 'remix'
+
+import { useActionData, Link, useSearchParams, Form } from 'remix'
+import { ValidatedForm, validationError, withYup } from 'remix-validated-form'
+import * as yup from 'yup'
+import { InputField } from '~/components/forms/InputField'
+import { SubmitButton } from '~/components/forms/SubmitButton'
+
 import { db } from '~/utils/db.server'
 import { createUserSession, login, register } from '~/utils/session.server'
 import stylesUrl from '../styles/login.css'
+
+const validator = withYup(
+  yup.object({
+    username: yup
+      .string()
+      .required('Username is required...')
+      .min(3, 'Username must be at least 3 characters long'),
+    password: yup
+      .string()
+      .required('Password is required...')
+      .min(6, 'Password must be at least 6 characters long'),
+    loginType: yup.string().required(),
+    redirectTo: yup.string()
+  })
+)
 
 export const links: LinksFunction = () => {
   return [{ rel: 'stylesheet', href: stylesUrl }]
@@ -15,17 +42,14 @@ export const meta: MetaFunction = () => {
   }
 }
 
-const validateUsername = (username: unknown) => {
-  if (typeof username !== 'string' || username.length < 3) {
-    return `Usernames must be at least 3 characters long`
+export const loader: LoaderFunction = () => ({
+  defaultValues: {
+    username: '',
+    password: '',
+    loginType: 'login',
+    redirectTo: ''
   }
-}
-
-const validatePassword = (password: unknown) => {
-  if (typeof password !== 'string' || password.length < 6) {
-    return `Passwords must be at least 6 characters long`
-  }
-}
+})
 
 type ActionData = {
   formError?: string
@@ -44,32 +68,22 @@ export const action: ActionFunction = async ({
   request
 }): Promise<Response | ActionData> => {
   const form = await request.formData()
-  const loginType = form.get('loginType')
-  const username = form.get('username')
-  const password = form.get('password')
-  const redirectTo = form.get('redirectTo') || '/jokes'
-  if (
-    typeof loginType !== 'string' ||
-    typeof username !== 'string' ||
-    typeof password !== 'string' ||
-    typeof redirectTo !== 'string'
-  ) {
-    return { formError: `Form not submitted correctly.` }
+  const { data, error } = validator.validate(Object.fromEntries(form))
+
+  if (error) {
+    return {
+      fieldErrors: { username: error?.username, password: error?.password }
+    }
   }
 
-  const fields = { loginType, username, password }
-  const fieldErrors = {
-    username: validateUsername(username),
-    password: validatePassword(password)
-  }
-  if (Object.values(fieldErrors).some(Boolean)) return { fieldErrors, fields }
-
+  const { username, password, loginType, redirectTo = '/jokes' } = data
+  // return
   switch (loginType) {
     case 'login': {
       const user = await login({ username, password })
       if (!user) {
         return {
-          fields,
+          fields: data,
           formError: `Username/Password combination is incorrect`
         }
       }
@@ -81,37 +95,38 @@ export const action: ActionFunction = async ({
       })
       if (userExists) {
         return {
-          fields,
+          fields: data,
           formError: `User with username ${username} already exists`
         }
       }
       const user = await register({ username, password })
       if (!user) {
         return {
-          fields,
+          fields: data,
           formError: `Something went wrong trying to create a new user.`
         }
       }
       return createUserSession(user.id, redirectTo)
     }
     default: {
-      return { fields, formError: `Login type invalid` }
+      return { fields: data, formError: `Login type invalid` }
     }
   }
 }
 
 const Login = () => {
+  const { defaultValues } = useLoaderData()
+
   const actionData = useActionData<ActionData | undefined>()
   const [searchParams] = useSearchParams()
   return (
     <div className="container">
       <div className="content" data-light="">
         <h1>Login</h1>
-        <Form
+        <ValidatedForm
+          validator={validator}
           method="post"
-          aria-describedby={
-            actionData?.formError ? 'form-error-message' : undefined
-          }
+          defaultValues={actionData?.fields || defaultValues}
         >
           <input
             type="hidden"
@@ -142,52 +157,8 @@ const Login = () => {
               Register
             </label>
           </fieldset>
-          <div>
-            <label htmlFor="username-input">Username</label>
-            <input
-              type="text"
-              id="username-input"
-              name="username"
-              defaultValue={actionData?.fields?.username}
-              aria-invalid={Boolean(actionData?.fieldErrors?.username)}
-              aria-describedby={
-                actionData?.fieldErrors?.username ? 'username-error' : undefined
-              }
-            />
-            {actionData?.fieldErrors?.username ? (
-              <p
-                className="form-validation-error"
-                role="alert"
-                id="username-error"
-              >
-                {actionData?.fieldErrors.username}
-              </p>
-            ) : null}
-          </div>
-          <div>
-            <label htmlFor="password-input">Password</label>
-            <input
-              id="password-input"
-              name="password"
-              defaultValue={actionData?.fields?.password}
-              type="password"
-              aria-invalid={
-                Boolean(actionData?.fieldErrors?.password) || undefined
-              }
-              aria-describedby={
-                actionData?.fieldErrors?.password ? 'password-error' : undefined
-              }
-            />
-            {actionData?.fieldErrors?.password ? (
-              <p
-                className="form-validation-error"
-                role="alert"
-                id="password-error"
-              >
-                {actionData?.fieldErrors.password}
-              </p>
-            ) : null}
-          </div>
+          <InputField name="username" label="Username" />
+          <InputField name="password" label="Password" type="password" />
           <div id="form-error-message">
             {actionData?.formError ? (
               <p className="form-validation-error" role="alert">
@@ -195,10 +166,8 @@ const Login = () => {
               </p>
             ) : null}
           </div>
-          <button type="submit" className="button">
-            Submit
-          </button>
-        </Form>
+          <SubmitButton />
+        </ValidatedForm>
       </div>
       <div className="links">
         <ul>
