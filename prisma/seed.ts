@@ -1,11 +1,19 @@
 import { PrismaClient } from '@prisma/client'
-
-const db = new PrismaClient()
+const prisma = new PrismaClient()
 
 async function seed() {
+  const kody = await prisma.user.create({
+    data: {
+      username: 'kody',
+      // this is a hashed version of "twixrox"
+      passwordHash:
+        '$2b$10$K7L1OJ45/4Y2nIvhRVpCe.FSmhDdWoXehVzJptJ/op0lSsvqNu/1u'
+    }
+  })
   await Promise.all(
     getJokes().map(joke => {
-      return db.joke.create({ data: joke })
+      const data = { jokesterId: kody.id, ...joke }
+      return prisma.joke.create({ data })
     })
   )
 }
@@ -13,6 +21,8 @@ async function seed() {
 seed()
 
 function getJokes() {
+  // shout-out to https://icanhazdadjoke.com/
+
   return [
     {
       name: 'Road worker',
@@ -40,7 +50,7 @@ function getJokes() {
     },
     {
       name: 'Elevator',
-      content: `My first time using an elevator was an uplifting experience. The second time let me down.`
+      content: `My first time using an elevator was an uplifting experience. The second time const me down.`
     }
   ]
 }
