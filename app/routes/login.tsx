@@ -6,12 +6,11 @@ import {
   useLoaderData
 } from 'remix'
 
-import { useActionData, Link, useSearchParams, Form } from 'remix'
-import { ValidatedForm, validationError, withYup } from 'remix-validated-form'
+import { useActionData, Link, useSearchParams } from 'remix'
+import { ValidatedForm, withYup } from 'remix-validated-form'
 import * as yup from 'yup'
-import { InputField } from '~/components/forms/InputField'
-import { SubmitButton } from '~/components/forms/SubmitButton'
 
+import { InputField, SubmitButton } from '~/components/forms'
 import { db } from '~/utils/db.server'
 import { createUserSession, login, register } from '~/utils/session.server'
 import stylesUrl from '../styles/login.css'
